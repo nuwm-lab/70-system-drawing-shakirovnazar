@@ -1,184 +1,230 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Windows.Forms;
 
-namespace StrategyLab
+namespace GraphStrategyLab
 {
     // =========================================================================
-    // 1. DOMAIN MODEL (Модель даних)
+    // 1. STRATEGY INTERFACE
     // =========================================================================
-    public class Book
+    /// <summary>
+    /// Інтерфейс стратегії: визначає, ЯКУ функцію ми будуємо.
+    /// </summary>
+    public interface IFunctionStrategy
     {
-        // Використовуємо 'init', щоб зробити об'єкт незмінним після створення (Immutability)
-        public string Title { get; init; }
-        public string Author { get; init; }
-        public int Year { get; init; }
-        public double Price { get; init; }
-
-        // Виправлено порядок параметрів для логічної відповідності (Title, Author...)
-        public Book(string title, string author, int year, double price)
-        {
-            Title = title;
-            Author = author;
-            Year = year;
-            Price = price;
-        }
-
-        public override string ToString()
-        {
-            // Форматований вивід
-            return $"{Author,-20} | \"{Title,-20}\" | {Year} | {Price,7:F2} UAH";
-        }
+        string Name { get; }
+        double Calculate(double x);
     }
 
     // =========================================================================
-    // 2. STRATEGY INTERFACE (Інтерфейс Стратегії)
-    // =========================================================================
-    public interface ISortStrategy
-    {
-        void Sort(List<Book> books);
-    }
-
-    // =========================================================================
-    // 3. CONCRETE STRATEGIES (Конкретні алгоритми)
+    // 2. CONCRETE STRATEGIES
     // =========================================================================
 
     /// <summary>
-    /// Стратегія: Сортування за Автором (А-Я).
+    /// Основна стратегія (Варіант 6): y = (3x + 1) / arctg(x)
     /// </summary>
-    public class SortByAuthorStrategy : ISortStrategy
+    public class LabVariantStrategy : IFunctionStrategy
     {
-        public void Sort(List<Book> books)
+        public string Name => "y = (3x + 1) / arctg(x)";
+
+        public double Calculate(double x)
         {
-            // Використовуємо ефективне вбудоване сортування
-            books.Sort((a, b) => string.Compare(a.Author, b.Author, StringComparison.Ordinal));
+            // Обробка особливої точки x -> 0, де arctg(x) -> 0
+            if (Math.Abs(x) < 1e-4) 
+                return double.NaN; // Позначаємо як "не число", щоб не малювати лінію в нескінченність
+
+            return (3 * x + 1) / Math.Atan(x);
         }
     }
 
     /// <summary>
-    /// Стратегія: Сортування за Роком (від нових до старих).
+    /// Додаткова стратегія для тестування (синусоїда).
     /// </summary>
-    public class SortByYearDescendingStrategy : ISortStrategy
+    public class SinStrategy : IFunctionStrategy
     {
-        public void Sort(List<Book> books)
-        {
-            // Сортування за спаданням року (b порівнюємо з a)
-            books.Sort((a, b) => b.Year.CompareTo(a.Year));
-        }
+        public string Name => "y = sin(x) * 5";
+        public double Calculate(double x) => Math.Sin(x) * 5;
     }
 
+    // =========================================================================
+    // 3. RENDERER (Логіка малювання)
+    // =========================================================================
     /// <summary>
-    /// Стратегія: Сортування за Ціною (від дешевих до дорогих).
+    /// Клас, що відповідає за перетворення координат і малювання.
+    /// Відокремлює логіку Graphics від форми.
     /// </summary>
-    public class SortByPriceAscendingStrategy : ISortStrategy
+    public class GraphRenderer
     {
-        public void Sort(List<Book> books)
+        private float _minX = -10f;
+        private float _maxX = 10f;
+        private float _minY = -20f;
+        private float _maxY = 20f;
+
+        public void Draw(Graphics g, int width, int height, IFunctionStrategy strategy)
         {
-            books.Sort((a, b) => a.Price.CompareTo(b.Price));
-        }
-    }
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Color.White);
 
-    // =========================================================================
-    // 4. CONTEXT (Контекст - Бібліотека)
-    // =========================================================================
-    public class Library
-    {
-        private readonly List<Book> _books;
-        private ISortStrategy _sortStrategy;
+            // 1. Розрахунок коефіцієнтів масштабування
+            // Відступаємо по 20 пікселів з країв
+            float margin = 40; 
+            float drawWidth = width - 2 * margin;
+            float drawHeight = height - 2 * margin;
 
-        // Подія для сповіщення UI про зміни (щоб уникнути Console.WriteLine всередині класу)
-        public event EventHandler<string> OnStrategyChanged;
+            if (drawWidth <= 0 || drawHeight <= 0) return;
 
-        public Library()
-        {
-            _books = new List<Book>();
-            // Стратегія за замовчуванням
-            _sortStrategy = new SortByAuthorStrategy(); 
-        }
+            // Коефіцієнти: скільки пікселів в одній одиниці координат
+            float scaleX = drawWidth / (_maxX - _minX);
+            float scaleY = drawHeight / (_maxY - _minY);
 
-        public void AddBook(Book book)
-        {
-            if (book == null) throw new ArgumentNullException(nameof(book));
-            _books.Add(book);
-        }
+            // Функції перетворення координат (Світ -> Екран)
+            float ToScreenX(double x) => margin + (float)((x - _minX) * scaleX);
+            float ToScreenY(double y) => margin + drawHeight - (float)((y - _minY) * scaleY); // Y інвертуємо
 
-        /// <summary>
-        /// Метод для динамічної зміни алгоритму сортування (Runtime).
-        /// </summary>
-        public void SetSortStrategy(ISortStrategy strategy)
-        {
-            // Захист від null згідно зауважень
-            _sortStrategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
-            
-            // Сповіщаємо підписників (Main) про зміну, замість прямого виводу в консоль
-            OnStrategyChanged?.Invoke(this, strategy.GetType().Name);
-        }
-
-        public void SortBooks()
-        {
-            if (_books.Count == 0) return;
-            
-            _sortStrategy.Sort(_books);
-        }
-
-        public void ShowLibrary()
-        {
-            Console.WriteLine(new string('-', 70));
-            Console.WriteLine($"{"Author",-20} | {"Title",-20} | {"Year"} | {"Price"}");
-            Console.WriteLine(new string('-', 70));
-            
-            foreach (var book in _books)
+            // 2. Малювання осей
+            using (var penAxis = new Pen(Color.Black, 2))
+            using (var font = new Font("Arial", 8))
+            using (var brush = new SolidBrush(Color.Black))
             {
-                Console.WriteLine(book);
+                // Вісь X (y = 0)
+                float y0 = ToScreenY(0);
+                if (y0 >= margin && y0 <= height - margin)
+                    g.DrawLine(penAxis, margin, y0, width - margin, y0);
+
+                // Вісь Y (x = 0)
+                float x0 = ToScreenX(0);
+                if (x0 >= margin && x0 <= width - margin)
+                    g.DrawLine(penAxis, x0, margin, x0, height - margin);
+                
+                // Підписи меж
+                g.DrawString(_minX.ToString(), font, brush, margin, y0 + 5);
+                g.DrawString(_maxX.ToString(), font, brush, width - margin - 20, y0 + 5);
             }
-            Console.WriteLine(new string('-', 70) + "\n");
+
+            // 3. Малювання графіка функції
+            using (var penGraph = new Pen(Color.Blue, 2))
+            {
+                // Крок дискретизації. Чим менше, тим плавніше.
+                // Робимо крок залежним від пікселів (щоб завжди було плавно)
+                double step = (_maxX - _minX) / drawWidth; 
+                
+                PointF? prevPoint = null;
+
+                for (double x = _minX; x <= _maxX; x += step)
+                {
+                    double y = strategy.Calculate(x);
+
+                    // Якщо точка не існує (NaN) або виходить далеко за межі Y (асимптота)
+                    if (double.IsNaN(y) || double.IsInfinity(y) || Math.Abs(y) > _maxY * 2)
+                    {
+                        prevPoint = null; // Розрив лінії
+                        continue;
+                    }
+
+                    // Перевірка на межі відображення (clipping), щоб не малювати за межами екрану
+                    if (y < _minY || y > _maxY)
+                    {
+                        prevPoint = null;
+                        continue;
+                    }
+
+                    float scrX = ToScreenX(x);
+                    float scrY = ToScreenY(y);
+
+                    PointF currentPoint = new PointF(scrX, scrY);
+
+                    if (prevPoint.HasValue)
+                    {
+                        // З'єднуємо попередню точку з поточною
+                        g.DrawLine(penGraph, prevPoint.Value, currentPoint);
+                    }
+
+                    prevPoint = currentPoint;
+                }
+            }
         }
     }
 
     // =========================================================================
-    // 5. PROGRAM (Точка входу)
+    // 4. MAIN FORM (Контекст / UI)
     // =========================================================================
-    class Program
+    public class MainForm : Form
     {
-        static void Main(string[] args)
+        private IFunctionStrategy _currentStrategy;
+        private readonly GraphRenderer _renderer;
+        private readonly ComboBox _strategySelector;
+
+        public MainForm()
         {
-            Console.OutputEncoding = Encoding.UTF8;
-            Console.WriteLine("=== Lab 7: Strategy Pattern (Books) ===\n");
+            // Налаштування форми
+            this.Text = "Lab 7: Strategy Pattern (Graphing)";
+            this.Size = new Size(800, 600);
+            this.DoubleBuffered = true; // Усуває миготіння при зміні розміру (вимога критики)
+            this.MinimumSize = new Size(400, 300);
 
-            Library myLibrary = new Library();
+            // Ініціалізація компонентів
+            _renderer = new GraphRenderer();
+            
+            // За замовчуванням - варіант 6
+            _currentStrategy = new LabVariantStrategy();
 
-            // Підписуємося на подію зміни стратегії (Decoupling UI from Logic)
-            myLibrary.OnStrategyChanged += (sender, strategyName) => 
+            // UI для перемикання стратегій
+            var panel = new Panel { Dock = DockStyle.Top, Height = 40 };
+            
+            _strategySelector = new ComboBox { 
+                Left = 10, Top = 8, Width = 200, 
+                DropDownStyle = ComboBoxStyle.DropDownList 
+            };
+            
+            _strategySelector.Items.Add(new LabVariantStrategy()); // Варіант 6
+            _strategySelector.Items.Add(new SinStrategy());        // Тест
+            
+            _strategySelector.DisplayMember = "Name";
+            _strategySelector.SelectedIndex = 0; // Вибираємо перший елемент
+
+            _strategySelector.SelectedIndexChanged += (s, e) =>
             {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine($"[System] Стратегію змінено на: {strategyName}");
-                Console.ResetColor();
+                // Зміна стратегії (Runtime)
+                if (_strategySelector.SelectedItem is IFunctionStrategy strategy)
+                {
+                    _currentStrategy = strategy;
+                    this.Invalidate(); // Викликає перерисовку
+                }
             };
 
-            // 1. Наповнення даними
-            // ВИПРАВЛЕНО: Порядок аргументів (Title, Author, Year, Price)
-            myLibrary.AddBook(new Book("Kobzar", "Shevchenko T.", 1840, 350.00));
-            myLibrary.AddBook(new Book("1984", "Orwell G.", 1949, 210.50));
-            myLibrary.AddBook(new Book("It", "King S.", 1986, 450.00));
-            myLibrary.AddBook(new Book("Harry Potter", "Rowling J.K.", 1997, 300.00));
-            myLibrary.AddBook(new Book("Zakhar Berkut", "Franko I.", 1883, 180.00));
+            panel.Controls.Add(new Label { Text = "Function:", Left = 220, Top = 12, AutoSize = true });
+            panel.Controls.Add(_strategySelector);
+            this.Controls.Add(panel);
+        }
 
-            Console.WriteLine("--- Початковий стан (Сортування за замовчуванням: Author) ---");
-            myLibrary.SortBooks();
-            myLibrary.ShowLibrary();
+        // Подія перерисовки (стандартний метод WinForms)
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            // Делегуємо малювання рендереру, передаючи поточну стратегію
+            _renderer.Draw(e.Graphics, this.ClientSize.Width, this.ClientSize.Height, _currentStrategy);
+        }
 
-            // 2. Зміна стратегії -> Сортування за Роком (спадання)
-            myLibrary.SetSortStrategy(new SortByYearDescendingStrategy());
-            myLibrary.SortBooks();
-            myLibrary.ShowLibrary();
+        // При зміні розміру форми просто викликаємо перерисовку
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            this.Invalidate();
+        }
+    }
 
-            // 3. Зміна стратегії -> Сортування за Ціною (зростання)
-            myLibrary.SetSortStrategy(new SortByPriceAscendingStrategy());
-            myLibrary.SortBooks();
-            myLibrary.ShowLibrary();
-
-            Console.WriteLine("Програма завершена. Натисніть Enter.");
-            Console.ReadLine();
+    // =========================================================================
+    // 5. PROGRAM ENTRY POINT
+    // =========================================================================
+    static class Program
+    {
+        [STAThread]
+        static void Main()
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(new MainForm());
         }
     }
 }
