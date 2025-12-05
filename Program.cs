@@ -1,15 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 namespace StrategyLab
 {
-    // =======================================================================
-    // 1. DOMAIN MODEL (Варіант 6: Книги/Бібліотека)
-    // =======================================================================
-    #region Domain
-    
+    // =========================================================================
+    // 1. DOMAIN MODEL (Модель даних)
+    // =========================================================================
     public class Book
     {
         public string Title { get; set; }
@@ -27,61 +24,51 @@ namespace StrategyLab
 
         public override string ToString()
         {
-            return $"{Author, -15} | \"{Title, -20}\" | {Year} | {Price, 7:F2} UAH";
+            // Форматований вивід: Author (15 символів), Title (20 символів) і т.д.
+            return $"{Author,-15} | \"{Title,-20}\" | {Year} | {Price,7:F2} UAH";
         }
     }
 
-    #endregion
-
     // =========================================================================
-    // 2. STRATEGY INTERFACE
+    // 2. STRATEGY INTERFACE (Інтерфейс Стратегії)
     // =========================================================================
-    #region Interface
-
-    /// <summary>
-    /// Спільний інтерфейс для всіх алгоритмів сортування.
-    /// </summary>
     public interface ISortStrategy
     {
         void Sort(List<Book> books);
     }
 
-    #endregion
-
     // =========================================================================
-    // 3. CONCRETE STRATEGIES
+    // 3. CONCRETE STRATEGIES (Конкретні алгоритми)
     // =========================================================================
-    #region Strategies
 
     /// <summary>
-    /// Стратегія 1: Сортування за Автором (алфавітний порядок).
-    /// Використовує вбудований LINQ для лаконічності.
+    /// Стратегія: Сортування за Автором (А-Я).
     /// </summary>
     public class SortByAuthorStrategy : ISortStrategy
     {
         public void Sort(List<Book> books)
         {
-            Console.WriteLine(">> Застосовано: Сортування за АВТОРОМ (A-Z)...");
-            // Сортуємо in-place
+            Console.WriteLine(">> [Strategy] Сортування за АВТОРОМ (A-Z)...");
             books.Sort((a, b) => string.Compare(a.Author, b.Author, StringComparison.Ordinal));
         }
     }
 
     /// <summary>
-    /// Стратегія 2: Сортування за Роком видання (від нових до старих).
-    /// Реалізовано через бульбашкове сортування (Bubble Sort) для демонстрації алгоритму.
+    /// Стратегія: Сортування за Роком (від нових до старих).
+    /// Реалізація через алгоритм Bubble Sort (для демонстрації).
     /// </summary>
     public class SortByYearDescendingStrategy : ISortStrategy
     {
         public void Sort(List<Book> books)
         {
-            Console.WriteLine(">> Застосовано: Сортування за РОКОМ (Newest First) [Bubble Sort]...");
+            Console.WriteLine(">> [Strategy] Сортування за РОКОМ (спочатку нові)...");
             int n = books.Count;
+            // Бульбашкове сортування
             for (int i = 0; i < n - 1; i++)
             {
                 for (int j = 0; j < n - i - 1; j++)
                 {
-                    if (books[j].Year < books[j + 1].Year) // Порівняння для спадання
+                    if (books[j].Year < books[j + 1].Year) // Змінити знак на >, щоб було навпаки
                     {
                         // Swap
                         var temp = books[j];
@@ -94,28 +81,20 @@ namespace StrategyLab
     }
 
     /// <summary>
-    /// Стратегія 3: Сортування за Ціною (від дешевих до дорогих).
+    /// Стратегія: Сортування за Ціною (від дешевих до дорогих).
     /// </summary>
     public class SortByPriceAscendingStrategy : ISortStrategy
     {
         public void Sort(List<Book> books)
         {
-            Console.WriteLine(">> Застосовано: Сортування за ЦІНОЮ (Low -> High)...");
+            Console.WriteLine(">> [Strategy] Сортування за ЦІНОЮ (Low -> High)...");
             books.Sort((a, b) => a.Price.CompareTo(b.Price));
         }
     }
 
-    #endregion
-
     // =========================================================================
-    // 4. CONTEXT
+    // 4. CONTEXT (Контекст - Бібліотека)
     // =========================================================================
-    #region Context
-
-    /// <summary>
-    /// Контекст (Бібліотека), який зберігає посилання на стратегію
-    /// і делегує їй виконання роботи.
-    /// </summary>
     public class Library
     {
         private List<Book> _books;
@@ -124,7 +103,7 @@ namespace StrategyLab
         public Library()
         {
             _books = new List<Book>();
-            // Стратегія за замовчуванням
+            // Встановлюємо стратегію за замовчуванням, щоб уникнути NullReferenceException
             _sortStrategy = new SortByAuthorStrategy(); 
         }
 
@@ -133,6 +112,9 @@ namespace StrategyLab
             _books.Add(book);
         }
 
+        /// <summary>
+        /// Метод для динамічної зміни алгоритму сортування (Runtime).
+        /// </summary>
         public void SetSortStrategy(ISortStrategy strategy)
         {
             _sortStrategy = strategy;
@@ -141,9 +123,6 @@ namespace StrategyLab
             Console.ResetColor();
         }
 
-        /// <summary>
-        /// Метод, що виконує сортування, не знаючи деталей алгоритму.
-        /// </summary>
         public void SortBooks()
         {
             if (_books.Count == 0)
@@ -151,41 +130,39 @@ namespace StrategyLab
                 Console.WriteLine("Бібліотека порожня.");
                 return;
             }
-
             // Делегування виконання конкретній стратегії
             _sortStrategy.Sort(_books);
         }
 
         public void ShowLibrary()
         {
-            Console.WriteLine(new string('-', 60));
+            Console.WriteLine(new string('-', 65));
             Console.WriteLine($"{"Author",-15} | {"Title",-20} | {"Year"} | {"Price"}");
-            Console.WriteLine(new string('-', 60));
+            Console.WriteLine(new string('-', 65));
             
             foreach (var book in _books)
             {
                 Console.WriteLine(book);
             }
-            Console.WriteLine(new string('-', 60) + "\n");
+            Console.WriteLine(new string('-', 65) + "\n");
         }
     }
 
-    #endregion
-
     // =========================================================================
-    // 5. CLIENT (Main)
+    // 5. PROGRAM (Точка входу)
     // =========================================================================
     class Program
     {
         static void Main(string[] args)
         {
+            // Налаштування кодування для коректного відображення символів
             Console.OutputEncoding = Encoding.UTF8;
-            Console.WriteLine("=== Lab 7: Strategy Pattern (Variant 6: Library) ===\n");
 
-            // 1. Ініціалізація контексту
+            Console.WriteLine("=== Lab 7: Strategy Pattern (Books) ===\n");
+
             Library myLibrary = new Library();
 
-            // 2. Заповнення даними
+            // Наповнення даними
             myLibrary.AddBook(new Book("Shevchenko T.", "Kobzar", 1840, 350.00));
             myLibrary.AddBook(new Book("Orwell G.", "1984", 1949, 210.50));
             myLibrary.AddBook(new Book("King S.", "It", 1986, 450.00));
@@ -195,21 +172,21 @@ namespace StrategyLab
             Console.WriteLine("--- Початковий стан ---");
             myLibrary.ShowLibrary();
 
-            // 3. Використання Стратегії 1 (за замовчуванням - Автор)
+            // 1. Використання стратегії за замовчуванням (Author)
             myLibrary.SortBooks();
             myLibrary.ShowLibrary();
 
-            // 4. Зміна стратегії на runtime -> Сортування за Роком (Bubble Sort)
+            // 2. Зміна стратегії на сортування за Роком
             myLibrary.SetSortStrategy(new SortByYearDescendingStrategy());
             myLibrary.SortBooks();
             myLibrary.ShowLibrary();
 
-            // 5. Зміна стратегії на runtime -> Сортування за Ціною
+            // 3. Зміна стратегії на сортування за Ціною
             myLibrary.SetSortStrategy(new SortByPriceAscendingStrategy());
             myLibrary.SortBooks();
             myLibrary.ShowLibrary();
 
-            Console.WriteLine("Програма завершена.");
+            Console.WriteLine("Програма завершена. Натисніть Enter.");
             Console.ReadLine();
         }
     }
