@@ -9,11 +9,13 @@ namespace StrategyLab
     // =========================================================================
     public class Book
     {
-        public string Title { get; set; }
-        public string Author { get; set; }
-        public int Year { get; set; }
-        public double Price { get; set; }
+        // Використовуємо 'init', щоб зробити об'єкт незмінним після створення (Immutability)
+        public string Title { get; init; }
+        public string Author { get; init; }
+        public int Year { get; init; }
+        public double Price { get; init; }
 
+        // Виправлено порядок параметрів для логічної відповідності (Title, Author...)
         public Book(string title, string author, int year, double price)
         {
             Title = title;
@@ -24,8 +26,8 @@ namespace StrategyLab
 
         public override string ToString()
         {
-            // Форматований вивід: Author (15 символів), Title (20 символів) і т.д.
-            return $"{Author,-15} | \"{Title,-20}\" | {Year} | {Price,7:F2} UAH";
+            // Форматований вивід
+            return $"{Author,-20} | \"{Title,-20}\" | {Year} | {Price,7:F2} UAH";
         }
     }
 
@@ -48,35 +50,20 @@ namespace StrategyLab
     {
         public void Sort(List<Book> books)
         {
-            Console.WriteLine(">> [Strategy] Сортування за АВТОРОМ (A-Z)...");
+            // Використовуємо ефективне вбудоване сортування
             books.Sort((a, b) => string.Compare(a.Author, b.Author, StringComparison.Ordinal));
         }
     }
 
     /// <summary>
     /// Стратегія: Сортування за Роком (від нових до старих).
-    /// Реалізація через алгоритм Bubble Sort (для демонстрації).
     /// </summary>
     public class SortByYearDescendingStrategy : ISortStrategy
     {
         public void Sort(List<Book> books)
         {
-            Console.WriteLine(">> [Strategy] Сортування за РОКОМ (спочатку нові)...");
-            int n = books.Count;
-            // Бульбашкове сортування
-            for (int i = 0; i < n - 1; i++)
-            {
-                for (int j = 0; j < n - i - 1; j++)
-                {
-                    if (books[j].Year < books[j + 1].Year) // Змінити знак на >, щоб було навпаки
-                    {
-                        // Swap
-                        var temp = books[j];
-                        books[j] = books[j + 1];
-                        books[j + 1] = temp;
-                    }
-                }
-            }
+            // Сортування за спаданням року (b порівнюємо з a)
+            books.Sort((a, b) => b.Year.CompareTo(a.Year));
         }
     }
 
@@ -87,7 +74,6 @@ namespace StrategyLab
     {
         public void Sort(List<Book> books)
         {
-            Console.WriteLine(">> [Strategy] Сортування за ЦІНОЮ (Low -> High)...");
             books.Sort((a, b) => a.Price.CompareTo(b.Price));
         }
     }
@@ -97,18 +83,22 @@ namespace StrategyLab
     // =========================================================================
     public class Library
     {
-        private List<Book> _books;
+        private readonly List<Book> _books;
         private ISortStrategy _sortStrategy;
+
+        // Подія для сповіщення UI про зміни (щоб уникнути Console.WriteLine всередині класу)
+        public event EventHandler<string> OnStrategyChanged;
 
         public Library()
         {
             _books = new List<Book>();
-            // Встановлюємо стратегію за замовчуванням, щоб уникнути NullReferenceException
+            // Стратегія за замовчуванням
             _sortStrategy = new SortByAuthorStrategy(); 
         }
 
         public void AddBook(Book book)
         {
+            if (book == null) throw new ArgumentNullException(nameof(book));
             _books.Add(book);
         }
 
@@ -117,34 +107,31 @@ namespace StrategyLab
         /// </summary>
         public void SetSortStrategy(ISortStrategy strategy)
         {
-            _sortStrategy = strategy;
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"[System] Стратегію змінено на: {strategy.GetType().Name}");
-            Console.ResetColor();
+            // Захист від null згідно зауважень
+            _sortStrategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
+            
+            // Сповіщаємо підписників (Main) про зміну, замість прямого виводу в консоль
+            OnStrategyChanged?.Invoke(this, strategy.GetType().Name);
         }
 
         public void SortBooks()
         {
-            if (_books.Count == 0)
-            {
-                Console.WriteLine("Бібліотека порожня.");
-                return;
-            }
-            // Делегування виконання конкретній стратегії
+            if (_books.Count == 0) return;
+            
             _sortStrategy.Sort(_books);
         }
 
         public void ShowLibrary()
         {
-            Console.WriteLine(new string('-', 65));
-            Console.WriteLine($"{"Author",-15} | {"Title",-20} | {"Year"} | {"Price"}");
-            Console.WriteLine(new string('-', 65));
+            Console.WriteLine(new string('-', 70));
+            Console.WriteLine($"{"Author",-20} | {"Title",-20} | {"Year"} | {"Price"}");
+            Console.WriteLine(new string('-', 70));
             
             foreach (var book in _books)
             {
                 Console.WriteLine(book);
             }
-            Console.WriteLine(new string('-', 65) + "\n");
+            Console.WriteLine(new string('-', 70) + "\n");
         }
     }
 
@@ -155,33 +142,37 @@ namespace StrategyLab
     {
         static void Main(string[] args)
         {
-            // Налаштування кодування для коректного відображення символів
             Console.OutputEncoding = Encoding.UTF8;
-
             Console.WriteLine("=== Lab 7: Strategy Pattern (Books) ===\n");
 
             Library myLibrary = new Library();
 
-            // Наповнення даними
-            myLibrary.AddBook(new Book("Shevchenko T.", "Kobzar", 1840, 350.00));
-            myLibrary.AddBook(new Book("Orwell G.", "1984", 1949, 210.50));
-            myLibrary.AddBook(new Book("King S.", "It", 1986, 450.00));
-            myLibrary.AddBook(new Book("Rowling J.K.", "Harry Potter", 1997, 300.00));
-            myLibrary.AddBook(new Book("Franko I.", "Zakhar Berkut", 1883, 180.00));
+            // Підписуємося на подію зміни стратегії (Decoupling UI from Logic)
+            myLibrary.OnStrategyChanged += (sender, strategyName) => 
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"[System] Стратегію змінено на: {strategyName}");
+                Console.ResetColor();
+            };
 
-            Console.WriteLine("--- Початковий стан ---");
-            myLibrary.ShowLibrary();
+            // 1. Наповнення даними
+            // ВИПРАВЛЕНО: Порядок аргументів (Title, Author, Year, Price)
+            myLibrary.AddBook(new Book("Kobzar", "Shevchenko T.", 1840, 350.00));
+            myLibrary.AddBook(new Book("1984", "Orwell G.", 1949, 210.50));
+            myLibrary.AddBook(new Book("It", "King S.", 1986, 450.00));
+            myLibrary.AddBook(new Book("Harry Potter", "Rowling J.K.", 1997, 300.00));
+            myLibrary.AddBook(new Book("Zakhar Berkut", "Franko I.", 1883, 180.00));
 
-            // 1. Використання стратегії за замовчуванням (Author)
+            Console.WriteLine("--- Початковий стан (Сортування за замовчуванням: Author) ---");
             myLibrary.SortBooks();
             myLibrary.ShowLibrary();
 
-            // 2. Зміна стратегії на сортування за Роком
+            // 2. Зміна стратегії -> Сортування за Роком (спадання)
             myLibrary.SetSortStrategy(new SortByYearDescendingStrategy());
             myLibrary.SortBooks();
             myLibrary.ShowLibrary();
 
-            // 3. Зміна стратегії на сортування за Ціною
+            // 3. Зміна стратегії -> Сортування за Ціною (зростання)
             myLibrary.SetSortStrategy(new SortByPriceAscendingStrategy());
             myLibrary.SortBooks();
             myLibrary.ShowLibrary();
